@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, EmailStr
 from datetime import datetime, timedelta
 from typing import Optional, Annotated
 from bson import ObjectId
@@ -11,6 +11,105 @@ def validate_object_id(v: str) -> ObjectId:
     return ObjectId(v)
 
 
+# User Models
+class UserBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="User's full name")
+    email: EmailStr = Field(..., description="User's email address")
+
+    model_config = {
+        "json_encoders": {ObjectId: str},
+        "json_schema_extra": {
+            "example": {
+                "name": "John Doe",
+                "email": "john.doe@example.com"
+            }
+        }
+    }
+
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=6, description="User's password (will be hashed)")
+
+    model_config = {
+        "json_encoders": {ObjectId: str},
+        "json_schema_extra": {
+            "example": {
+                "name": "John Doe",
+                "email": "john.doe@example.com",
+                "password": "securepassword123"
+            }
+        }
+    }
+
+
+class UserResponse(UserBase):
+    id: Annotated[str, Field(alias="_id")] = Field(..., description="MongoDB ObjectId")
+    created_at: datetime = Field(..., description="Timestamp when user was created")
+    updated_at: datetime = Field(..., description="Timestamp when user was last updated")
+
+    model_config = {
+        "populate_by_name": True,
+        "json_encoders": {ObjectId: str},
+        "json_schema_extra": {
+            "example": {
+                "_id": "507f1f77bcf86cd799439011",
+                "name": "John Doe",
+                "email": "john.doe@example.com",
+                "created_at": "2024-01-15T10:30:00",
+                "updated_at": "2024-01-15T10:30:00"
+            }
+        }
+    }
+
+    @field_validator('id', mode='before')
+    @classmethod
+    def validate_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+
+class UserLogin(BaseModel):
+    email: EmailStr = Field(..., description="User's email address")
+    password: str = Field(..., description="User's password")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "email": "john.doe@example.com",
+                "password": "securepassword123"
+            }
+        }
+    }
+
+
+class Token(BaseModel):
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    user: UserResponse = Field(..., description="User information")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "user": {
+                    "_id": "507f1f77bcf86cd799439011",
+                    "name": "John Doe",
+                    "email": "john.doe@example.com",
+                    "created_at": "2024-01-15T10:30:00",
+                    "updated_at": "2024-01-15T10:30:00"
+                }
+            }
+        }
+    }
+
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
+
+
+# Existing Clothing Item Models
 class ClothingItemBase(BaseModel):
     name: str = Field(..., description="Name of the clothing item")
     clothingItemType: str = Field(..., description="Type of clothing item (e.g., shirt, pants, socks, jacket)")

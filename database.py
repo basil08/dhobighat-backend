@@ -13,15 +13,25 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "dhobighat")
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 database = client[DATABASE_NAME]
 
-# Get collection
+# Get collections
 clothing_collection = database.clothing_items
+users_collection = database.users
 
 # Create indexes for better performance
 async def create_indexes():
     """Create database indexes for better query performance"""
+    # Clothing items indexes
     await clothing_collection.create_index("name")
     await clothing_collection.create_index("last_cleaned")
     await clothing_collection.create_index("next_cleaning_date")
+    
+    # Users indexes
+    await users_collection.create_index("email", unique=True)
+    await users_collection.create_index("name")
+
+def get_database():
+    """Get the database instance"""
+    return database
 
 # Test database connection
 async def test_connection():

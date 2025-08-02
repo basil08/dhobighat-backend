@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -9,9 +9,10 @@ import base64
 import aiohttp
 import io
 
-from models import ClothingItemCreate, ClothingItemResponse
+from models import ClothingItemCreate, ClothingItemResponse, UserCreate, UserLogin, Token, UserResponse
 from crud import clothing_crud
 from database import test_connection, create_indexes
+from auth import create_user, authenticate_user, create_access_token, get_current_user
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,6 +64,9 @@ async def root():
         "version": "1.0.0",
         "description": "A FastAPI backend service for managing clothing items with cleaning schedules",
         "endpoints": {
+            "POST /auth/signup": "Register a new user",
+            "POST /auth/login": "Login user",
+            "GET /auth/me": "Get current user info",
             "POST /clothing-items": "Create a new clothing item",
             "GET /clothing-items": "Get all clothing items (indexed by type)",
             "GET /clothing-items/{item_id}": "Get a specific clothing item",
@@ -74,6 +78,59 @@ async def root():
             "GET /clothing-items/recently-cleaned": "Get recently cleaned items"
         }
     }
+
+
+# Authentication endpoints
+@app.post("/auth/signup", response_model=Token, status_code=201)
+async def signup(user_data: UserCreate):
+    """Register a new user"""
+    try:
+        # Create the user
+        user = await create_user(user_data)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.id})
+        
+        return Token(access_token=access_token, user=user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred during registration: {str(e)}"
+        )
+
+
+@app.post("/auth/login", response_model=Token)
+async def login(user_credentials: UserLogin):
+    """Login user"""
+    try:
+        # Authenticate user
+        user = await authenticate_user(user_credentials.email, user_credentials.password)
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.id})
+        
+        return Token(access_token=access_token, user=user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred during login: {str(e)}"
+        )
+
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: UserResponse = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
 
 
 @app.post("/clothing-items", response_model=ClothingItemResponse, status_code=201)
